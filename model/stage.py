@@ -222,35 +222,37 @@ class STAGE(nn.Module):
         num_a = self.num_a
         hsz = self.hsz
 
-        a_embed = self.base_encoder(batch.qas_bert.view(bsz*num_a, -1, self.wd_size),  # (N*5, L, D)
-                                    batch.qas_mask.view(bsz * num_a, -1),  # (N*5, L)
-                                    self.bert_word_encoding_fc,
-                                    self.input_embedding,
-                                    self.input_encoder)  # (N*5, L, D)
-        a_embed = a_embed.view(bsz, num_a, 1, -1, hsz)  # (N, 5, 1, L, D)
-        a_mask = batch.qas_mask.view(bsz, num_a, 1, -1)  # (N, 5, 1, L)
-
-        attended_sub, attended_vid, attended_vid_mask, attended_sub_mask = (None, ) * 4
         other_outputs = {}  # {"pos_noun_mask": batch.qa_noun_masks}  # used to visualization and compute att acc
-        if self.sub_flag:
-            num_imgs, num_words = batch.sub_bert.shape[1:3]
-            sub_embed = self.base_encoder(batch.sub_bert.view(bsz*num_imgs, num_words, -1),  # (N*Li, Lw)
-                                          batch.sub_mask.view(bsz * num_imgs, num_words),  # (N*Li, Lw)
-                                          self.bert_word_encoding_fc,
-                                          self.input_embedding,
-                                          self.input_encoder)  # (N*Li, Lw, D)
+        # #qas
+        # a_embed = self.base_encoder(batch.qas_bert.view(bsz*num_a, -1, self.wd_size),  # (N*5, L, D)
+        #                             batch.qas_mask.view(bsz * num_a, -1),  # (N*5, L)
+        #                             self.bert_word_encoding_fc,
+        #                             self.input_embedding,
+        #                             self.input_encoder)  # (N*5, L, D)
+        # a_embed = a_embed.view(bsz, num_a, 1, -1, hsz)  # (N, 5, 1, L, D)
+        # a_mask = batch.qas_mask.view(bsz, num_a, 1, -1)  # (N, 5, 1, L)
+        #
+        # attended_sub, attended_vid, attended_vid_mask, attended_sub_mask = (None, ) * 4
 
-            sub_embed = sub_embed.contiguous().view(bsz, 1, num_imgs, num_words, -1)  # (N, Li, Lw, D)
-            sub_mask = batch.sub_mask.view(bsz, 1, num_imgs, num_words)  # (N, 1, Li, Lw)
-
-            attended_sub, attended_sub_mask, sub_raw_s, sub_normalized_s = \
-                self.qa_ctx_attention(a_embed, sub_embed, a_mask, sub_mask,
-                                      noun_mask=None,
-                                      non_visual_vectors=None)
-
-            other_outputs["sub_normalized_s"] = sub_normalized_s
-            other_outputs["sub_raw_s"] = sub_raw_s
-
+        # if self.sub_flag:
+        #     num_imgs, num_words = batch.sub_bert.shape[1:3]
+        #     sub_embed = self.base_encoder(batch.sub_bert.view(bsz*num_imgs, num_words, -1),  # (N*Li, Lw)
+        #                                   batch.sub_mask.view(bsz * num_imgs, num_words),  # (N*Li, Lw)
+        #                                   self.bert_word_encoding_fc,
+        #                                   self.input_embedding,
+        #                                   self.input_encoder)  # (N*Li, Lw, D)
+        #
+        #     sub_embed = sub_embed.contiguous().view(bsz, 1, num_imgs, num_words, -1)  # (N, Li, Lw, D)
+        #     sub_mask = batch.sub_mask.view(bsz, 1, num_imgs, num_words)  # (N, 1, Li, Lw)
+        #
+        #     attended_sub, attended_sub_mask, sub_raw_s, sub_normalized_s = \
+        #         self.qa_ctx_attention(a_embed, sub_embed, a_mask, sub_mask,
+        #                               noun_mask=None,
+        #                               non_visual_vectors=None)
+        #
+        #     other_outputs["sub_normalized_s"] = sub_normalized_s
+        #     other_outputs["sub_raw_s"] = sub_raw_s
+        # video branch
         if self.vfeat_flag:
             num_imgs, num_regions = batch.vid.shape[1:3]
             vid_embed = F.normalize(batch.vid, p=2, dim=-1)  # (N, Li, Lr, D)
@@ -264,27 +266,35 @@ class STAGE(nn.Module):
             vid_embed = vid_embed.contiguous().view(bsz, 1, num_imgs, num_regions, -1)  # (N, 1, Li, Lr, D)
             vid_mask = batch.vid_mask.view(bsz, 1, num_imgs, num_regions)  # (N, 1, Li, Lr)
 
-            attended_vid, attended_vid_mask, vid_raw_s, vid_normalized_s = \
-                self.qa_ctx_attention(a_embed, vid_embed, a_mask, vid_mask,
-                                      noun_mask=None,
-                                      non_visual_vectors=None)
+            # attended_vid, attended_vid_mask, vid_raw_s, vid_normalized_s = \
+            #     self.qa_ctx_attention(a_embed, vid_embed, a_mask, vid_mask,
+            #                           noun_mask=None,
+            #                           non_visual_vectors=None)
+            attended_vid = vid_embed
+            attended_vid_mask = vid_mask
 
-            other_outputs["vid_normalized_s"] = vid_normalized_s
-            other_outputs["vid_raw_s"] = vid_raw_s
+            # other_outputs["vid_normalized_s"] = vid_normalized_s
+            # other_outputs["vid_raw_s"] = vid_raw_s
 
-        if self.flag_cnt == 2:
-            visual_text_embedding = torch.cat([attended_sub,
-                                               attended_vid,
-                                               attended_sub * attended_vid], dim=-1)  # (N, 5, Li, Lqa, 3D)
-            visual_text_embedding = self.concat_fc(visual_text_embedding)  # (N, 5, Li, Lqa, D)
-            out, target, t_scores = self.classfier_head_multi_proposal(
-                visual_text_embedding, attended_vid_mask, batch.target, batch.ts_label, batch.ts_label_mask,
-                extra_span_length=self.extra_span_length)
-        elif self.sub_flag:
-            out, target, t_scores = self.classfier_head_multi_proposal(
-                attended_sub, attended_sub_mask, batch.target, batch.ts_label, batch.ts_label_mask,
-                extra_span_length=self.extra_span_length)
-        elif self.vfeat_flag:
+        # if self.flag_cnt == 2:
+        #     visual_text_embedding = torch.cat([attended_sub,
+        #                                        attended_vid,
+        #                                        attended_sub * attended_vid], dim=-1)  # (N, 5, Li, Lqa, 3D)
+        #     visual_text_embedding = self.concat_fc(visual_text_embedding)  # (N, 5, Li, Lqa, D)
+        #     out, target, t_scores = self.classfier_head_multi_proposal(
+        #         visual_text_embedding, attended_vid_mask, batch.target, batch.ts_label, batch.ts_label_mask,
+        #         extra_span_length=self.extra_span_length)
+        # elif self.sub_flag:
+        #     out, target, t_scores = self.classfier_head_multi_proposal(
+        #         attended_sub, attended_sub_mask, batch.target, batch.ts_label, batch.ts_label_mask,
+        #         extra_span_length=self.extra_span_length)
+        # elif self.vfeat_flag:
+        #     out, target, t_scores = self.classfier_head_multi_proposal(
+        #         attended_vid, attended_vid_mask, batch.target, batch.ts_label, batch.ts_label_mask,
+        #         extra_span_length=self.extra_span_length)
+        # else:
+        #     raise NotImplementedError
+        if self.vfeat_flag:
             out, target, t_scores = self.classfier_head_multi_proposal(
                 attended_vid, attended_vid_mask, batch.target, batch.ts_label, batch.ts_label_mask,
                 extra_span_length=self.extra_span_length)

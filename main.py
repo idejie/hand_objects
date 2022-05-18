@@ -1,25 +1,27 @@
 import os
 import sys
 import time
+
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import torch.nn as nn
+from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import numpy as np
-from tensorboardX import SummaryWriter
 
-from utils import AverageMeter, count_parameters
-from model.stage import STAGE
-from prn_dataset import PNRDataset, pad_collate, prepare_inputs
 from config import BaseOptions
+from model.stage import STAGE
+from pnr_dataset import PNRDataset , pad_collate, prepare_inputs
+from utils import AverageMeter, count_parameters
 
 
 def train(opt, dset, model, criterion, optimizer, epoch, previous_best_acc, use_hard_negatives=False):
     dset.set_mode("train")
     model.train()
     train_loader = DataLoader(dset, batch_size=opt.bsz, shuffle=True,
-                              collate_fn=pad_collate, num_workers=opt.num_workers, pin_memory=True)
+                              collate_fn=pad_collate,
+                              num_workers=opt.num_workers, pin_memory=True)
 
     train_loss = []
     train_loss_att = []

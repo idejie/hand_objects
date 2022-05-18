@@ -32,8 +32,9 @@ class EncoderBlock(nn.Module):
         :param mask: (N, L)
         :return: (N, L, D)
         """
+        # position encoding
         outputs = self.position_encoding(x)  # (N, L, D)
-
+        # repeat conv(layer_norm(x))+x
         for i in range(self.n_conv):
             residual = outputs
             outputs = self.layer_norm[i](outputs)
