@@ -30,6 +30,11 @@ class BaseOptions(object):
         self.parser.add_argument("--device_ids", type=int, nargs="+", default=[0], help="GPU ids to run the job")
         self.parser.add_argument("--num_workers", type=int, default=2,
                                  help="num subprocesses used to load the data, 0: use main process")
+        #for hand-objects
+        self.parser.add_argument('--fps',type=float,default=30)
+        self.parser.add_argument('--train_info',type=str,default='data/train_info.json')
+        
+
         self.parser.add_argument("--t_iter", type=int, default=0,
                                  help="positive integer, indicating #iterations for refine temporal prediction")
         self.parser.add_argument("--t_layer_type", type=str, default="linear", choices=["linear", "conv"],
